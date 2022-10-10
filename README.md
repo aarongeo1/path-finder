@@ -1,4 +1,4 @@
-# ============== Navigation-system ==============
+# ===== Navigation-system =====
 
 ## An Indrodution to Tangible Computing Course work where I had to find the shortest path from one point to another using the coordinates given to us of the map of edmonton
 
