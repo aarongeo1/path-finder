@@ -1,189 +1,194 @@
-// ---------------------------------------------------
+
 // Name : Aaron Geo Binoy
-// ---------------------------------------------------
+
 #include <iostream>
-#include <cassert>
 #include <fstream>
+#include <queue>
+#include <vector>
 #include <string>
-#include <list>
-
-#include <unistd.h>
-#include <fcntl.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sstream>
-
-#include "wdigraph.h"
 #include "dijkstra.h"
+#include "digraph.h"
+#include "wdigraph.h"
 
+using namespace std;
+
+// the datatype which stores the latitudes and longitudes
 struct Point {
-    long long lat, lon;
+	long long lat;
+	// latitude of the point
+	long long lon;
+	// longitude of the point
 };
 
-// returns the manhattan distance between two points
+/*
+	Description : creates the cost of the edge
+	Arguments:
+		Point pt1 - the Point dataype of the first vertex we take
+		Point Pt2 - the Point datatype of the second vectex we take
+	Returns:
+		long long sum - the cost
+*/
 long long manhattan(const Point& pt1, const Point& pt2) {
-  long long dLat = pt1.lat - pt2.lat, dLon = pt1.lon - pt2.lon;
-  return abs(dLat) + abs(dLon);
+	long long sum = abs(pt1.lat - pt2.lat) + abs(pt1.lon - pt2.lon);
+	return sum;
 }
 
-// finds the id of the point that is closest to the given point "pt"
-int findClosest(const Point& pt, const unordered_map<int, Point>& points) {
-  pair<int, Point> best = *points.begin();
+// a new alias for datatype pair
+typedef pair<int, int> vpil;
 
-  for (const auto& check : points) {
-    if (manhattan(pt, check.second) < manhattan(pt, best.second)) {
-      best = check;
-    }
-  }
-  return best.first;
+/*
+	Description : it reads the text file and reads each line to create the
+		vertexes and edges to connect directly
+	Arguments:
+		string filename - the name of the file from which we get the inputs
+		WDigraph& graph - a reference to the graph to build from the inputs
+		unordered_map<int, Point>& points - the unordered map where we store the
+			latitude and longitude for each vertex.
+	Returns:
+		void - none
+*/
+void readGraph(string filename, WDigraph& graph,
+	unordered_map<int, Point>& points) {
+	string line;
+	ifstream file(filename);
+	while (getline(file, line)) {
+		if (line[0] == 'V') {
+			// checking if it is a vertex
+			int size = line.find(',', 2);
+			// using the index to convert string to integer
+			int id = stoi(line.substr(2, size - 2));
+			int size1 = line.find(",", size + 1);
+			// getting the coordinates and storing it in as double
+			double coord2 = stod(line.substr(size1 + 1));
+			double coord1 = stod(line.substr(size + 1, size1 - size - 1));
+			Point coord;
+			// storing the coordinates in Point
+			coord.lat = static_cast<long long>(coord1 * 100000);
+			coord.lon = static_cast<long long>(coord2 * 100000);
+			points[id] = coord;
+			// adding each vertex
+			graph.addVertex(id);
+		}
+		if (line[0] == 'E') {
+			int firstid = line.find(',', 2);
+			// using the index to convert string to integer
+			int fv = stoi(line.substr(2, firstid - 2));
+			int secondid = line.find(',', firstid + 1);
+			// using the index to convert string to integer
+			int sv = stoi(line.substr(firstid + 1, secondid - firstid - 1));
+			long long cost = manhattan(points[fv], points[sv]);
+			// since its not undirectly, we only add one side
+			graph.addEdge(fv, sv, cost);
+		}
+	}
 }
 
-// read the graph from the file that has the same format as the "Edmonton graph" file
-void readGraph(const string& filename, WDigraph& g, unordered_map<int, Point>& points) {
-  ifstream fin(filename);
-  string line;
-
-  while (getline(fin, line)) {
-    // split the string around the commas, there will be 4 substrings either way
-    string p[4];
-    int at = 0;
-    for (auto c : line) {
-      if (c == ',') {
-        // start new string
-        ++at;
-      }
-      else {
-        // append character to the string we are building
-        p[at] += c;
-      }
-    }
-
-    if (at != 3) {
-      // empty line
-      break;
-    }
-
-    if (p[0] == "V") {
-      // new Point
-      int id = stoi(p[1]);
-      assert(id == stoll(p[1])); // sanity check: asserts if some id is not 32-bit
-      points[id].lat = static_cast<long long>(stod(p[2])*100000);
-      points[id].lon = static_cast<long long>(stod(p[3])*100000);
-      g.addVertex(id);
-    }
-    else {
-      // new directed edge
-      int u = stoi(p[1]), v = stoi(p[2]);
-      g.addEdge(u, v, manhattan(points[u], points[v]));
-    }
-  }
+/*
+	Description :gets the closest vertex from the coordinates given in the input
+	Arguments:
+		Point x - the Point dataype of the first vertex we take
+		Point y - the Point datatype of the second vectex we take
+		unordered_map<int, Point> &points - the unordered map where we store the
+			latitude and longitude for each vertex.
+	Returns:
+		vpil ver - the new alias of pair which contains the start and end vertex
+*/
+vpil getvertex(Point x, Point y, unordered_map<int, Point> &points) {
+	vpil ver;
+	// keeping the first vertex for comparison
+	ver = {points.begin()->first, points.begin()->first};
+	string str = "";
+	for (auto it : points) {
+	// for finding the closest vertexes to that start and end
+		if (manhattan(it.second, x) < manhattan(points[ver.first], x)) {
+		ver.first = it.first;
+		str = "success";
+		}
+		if (manhattan(it.second, y) < manhattan(points[ver.second], y)) {
+		ver.second = it.first;
+		}
+	}
+	return ver;
 }
 
-int create_and_open_fifo(const char * pname, int mode) {
-  // creating a fifo special file in the current working directory
-  // with read-write permissions for communication with the plotter
-  // both proecsses must open the fifo before they can perform
-  // read and write operations on it
-  if (mkfifo(pname, 0666) == -1) {
-    cout << "Unable to make a fifo. Ensure that this pipe does not exist already!" << endl;
-    exit(-1);
-  }
-
-  // opening the fifo for read-only or write-only access
-  // a file descriptor that refers to the open file description is
-  // returned
-  int fd = open(pname, mode);
-
-  if (fd == -1) {
-    cout << "Error: failed on opening named pipe." << endl;
-    exit(-1);
-  }
-
-  return fd;
+/*
+	Description : To create the vertexes in order to output in main
+	Arguments:
+		Point x - the Point dataype of the first vertex we take
+		Point y - the Point datatype of the second vectex we take
+		unordered_map<int, Point> &points - the unordered map where we store the
+			latitude and longitude for each vertex.
+	Returns:
+		vpil ver - the new alias of pair which contains the start and end vertex
+*/
+vector<int> rever(unordered_map<int, PIL>& tree, int start, int end) {
+	vector<int> cod;
+	int current = end;
+	while (current != start) {
+		cod.push_back(current);
+		current = tree[current].first;
+	}
+	cod.push_back(start);
+	return cod;
 }
 
-// keep in mind that in part 1, the program should only handle 1 request
-// in part 2, you need to listen for a new request the moment you are done
-// handling one request
+/*
+	Description : gets the input, calls all the functions and outputs
+	Arguments:
+		None
+	Returns:
+		int 0
+*/
 int main() {
-  WDigraph graph;
-  unordered_map<int, Point> points;
-
-  const char *inpipe = "inpipe";
-  const char *outpipe = "outpipe";
-
-  // Open the two pipes
-  int in = create_and_open_fifo(inpipe, O_RDONLY);
-  cout << "inpipe opened..." << endl;
-  int out = create_and_open_fifo(outpipe, O_WRONLY);
-  cout << "outpipe opened..." << endl;  
-
-  // build the graph
-  readGraph("server/edmonton-roads-2.0.1.txt", graph, points);
-  int max1 = 1024;
-  while (true) {
-    string s = "";
-    Point sPoint, ePoint;
-    char *buffer = new char[max1];
-    double sla, slo, ela, elo;
-    read(in, buffer, max1);
-    // allocating buffer
-    for (int i = 0; i < max1; i++) {
-      s += buffer[i];
-    }
-    // ending if there is no path
-    if (s.find('Q') != string::npos) {
-      s = "";
-      // deallocating buffer
-      delete[] buffer;
-      break;
-    }
-    stringstream fin(s);
-    fin >> sla >> slo >> ela >> elo;
-    // getting coordinates
-    sPoint = {static_cast<long long>(sla * 100000), static_cast<long long>(slo * 100000)};
-    ePoint = {static_cast<long long>(ela * 100000), static_cast<long long>(elo * 100000)};
-    int start = findClosest(sPoint, points);
-    int end = findClosest(ePoint, points);
-    // run dijkstra's algorithm, this is the unoptimized version that
-    // does not stop when the end is reached but it is still fast enough
-    unordered_map<int, PIL> tree;
-    dijkstra(graph, start, tree);
-    // NOTE: in Part II you will use a different communication protocol than Part I
-    // So edit the code below to implement this protocol
-    if (tree.find(end) == tree.end()) {
-      // writing E to the output pipe
-      // to indicate that there is no path
-      write(out, "E\n", 16);
-    } else {
-      vector<int> cod;
-      while (end != start) {
-        cod.push_back(end);
-        end = tree[end].first;
-      }
-      cod.push_back(start);
-      // Declaring the ouput string.
-      string str = "";
-      int i = cod.size() - 1;
-      // getiing the coordinates backwards
-      while (i >= 0) {
-        // converting coordinates
-        string Lat = to_string(points[cod[i]].lat);
-        string Long = to_string(points[cod[i]].lon);
-        // converting the coordinates into decimals
-        Lat.insert(2, ".");
-        Long.insert(4, ".");
-        str += Lat + ' ' + Long + '\n';
-        i--;
-      }
-      str += "E\n";
-      write(out, str.c_str(), str.size());
-    }
-  }
-  // closing and deleting pipes
-  close(in);
-  close(out);
-  unlink(inpipe);
-  unlink(outpipe);
-  return 0;
+	// initializing all the variables
+	unordered_map<int, Point> points;
+	unordered_map<int, PIL> tree;
+	vpil ver;
+	vector<int> cod;
+	WDigraph graph = WDigraph();
+	Point x, y;
+	// gets the graph build from the text file
+	readGraph("edmonton-roads-2.0.1.txt", graph, points);
+	string check;
+	cin >> check;
+	// condition to check if to start reading
+	if (check == "R") {
+		cin >> check;
+		x.lat = static_cast<long long>(stod(check));
+		cin >> check;
+		x.lon = static_cast<long long>(stod(check));
+		cin >> check;
+		y.lat = static_cast<long long>(stod(check));
+		cin >> check;
+		y.lon = static_cast<long long>(stod(check));
+		// gets the closest vertex
+		ver = getvertex(x, y, points);
+		// algorithm to find the shortest path
+		dijkstra(graph, ver.first, tree);
+	}
+	//  checking if the path exists
+	if (tree.find(ver.second) == tree.end()) {
+		cout << "N 0" << endl;
+	// else condition if it does indeed exists
+	} else {
+		// building the vertexs in order of the shortest path
+		cod = rever(tree, ver.first, ver.second);
+		// starts the output
+		cout << "N " << cod.size() << endl;
+		int i = cod.size() - 1;
+		while (i >= 0) {
+			// conditions to print only if the user sends "A"
+			cin >> check;
+			if(check == "A") {
+				cout << "W " << points[cod[i]].lat << " ";
+				cout << points[cod[i]].lon << endl;
+				i--;
+			} else {
+				break;
+			}
+		}
+		// end of outputting
+		cout << "E" << endl;
+		return 0;
+	}
 }
